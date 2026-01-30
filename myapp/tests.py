@@ -2,6 +2,7 @@ from django.test import TestCase
 
 # Create your tests here.
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.contrib.auth.models import User, Permission
 from selenium.webdriver.firefox.webdriver import WebDriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
@@ -55,3 +56,40 @@ class MySeleniumTests(StaticLiveServerTestCase):
 
         # utilitzem assertNotEqual per testejar que NO hem entrat
         self.assertNotEqual( self.selenium.title , "Site administration | Django site admin" )
+    def test_staff_can_view_but_not_add_or_delete_users(self):
+        """
+        Crea un usuari staff amb permís de 'view_user'
+        i comprova que pot veure la llista d'usuaris
+        però NO pot crear ni esborrar.
+        """
+
+        # Crear usuario staff con permiso de ver usuarios
+        user = User.objects.create_user(
+            username="staff_viewer",
+            password="test1234",
+            is_staff=True
+        )
+        view_perm = Permission.objects.get(codename="view_user")
+        user.user_permissions.add(view_perm)
+
+        # Login
+        self.selenium.get(f"{self.live_server_url}/admin/login/")
+        self.selenium.find_element(By.NAME, "username").send_keys("staff_viewer")
+        self.selenium.find_element(By.NAME, "password").send_keys("test1234")
+        self.selenium.find_element(By.XPATH, '//input[@value="Log in"]').click()
+
+        # Ir a la lista de usuarios
+        self.selenium.get(f"{self.live_server_url}/admin/auth/user/")
+
+        # ✔ Puede ver la tabla de usuarios
+        table = self.selenium.find_elements(By.ID, "result_list")
+        self.assertEqual(len(table), 1, "El usuario debería poder ver la lista de usuarios")
+
+        # ✖ No puede crear usuarios (no aparece el botón Add user)
+        add_button = self.selenium.find_elements(By.CLASS_NAME, "addlink")
+        self.assertEqual(len(add_button), 0, "El usuario NO debería poder crear usuarios")
+
+        # ✖ No puede borrar usuarios (no aparecen checkboxes)
+        delete_checkboxes = self.selenium.find_elements(By.NAME, "_selected_action")
+        self.assertEqual(len(delete_checkboxes), 0, "El usuario NO debería poder borrar usuarios")
+
